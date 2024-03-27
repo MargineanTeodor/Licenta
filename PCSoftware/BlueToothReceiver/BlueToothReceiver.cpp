@@ -1,75 +1,68 @@
-//#include <iostream>
-//#include <Windows.h>
-//#include <process.h>
-//#include <winsock2.h>
-//#include <ws2bth.h>
-//#include <BluetoothAPIs.h>
-//
-//#pragma comment(lib, "ws2_32.lib")
-//
-//#define BUFFER_SIZE 1024
-//#define DEBUGG true
-//
-//
-//SOCKET createBluetoothSocket() {
-//    SOCKET serverSocket = socket(AF_BTH, SOCK_STREAM, BTHPROTO_RFCOMM);
-//    if (serverSocket == INVALID_SOCKET) {
-//        fprintf(stderr, "socket() failed with error: %ld\n", WSAGetLastError());
-//    }
-//    return serverSocket;
-//}
-//
-//SOCKET bindBluetoothSocket(SOCKET serverSocket, SOCKADDR_BTH& serverAddr) {
-//    memset(&serverAddr, 0, sizeof(SOCKADDR_BTH));
-//    serverAddr.addressFamily = AF_BTH;
-//    serverAddr.port = BT_PORT_ANY;  // Let the OS choose a port
-//    serverAddr.serviceClassId = GUID_NULL;  // Use the default service class ID
-//
-//    int result = bind(serverSocket, (SOCKADDR*)&serverAddr, sizeof(SOCKADDR_BTH));
-//    if (result == SOCKET_ERROR) {
-//        fprintf(stderr, "bind() failed with error: %ld\n", WSAGetLastError());
-//        closesocket(serverSocket);
-//        serverSocket = INVALID_SOCKET;
-//    }
-//
-//    return serverSocket;
-//}
-//
-//SOCKET acceptBluetoothConnection(SOCKET serverSocket, SOCKADDR_BTH& clientAddr) {
-//    SOCKET clientSocket = INVALID_SOCKET;
-//    int clientAddrLen = sizeof(SOCKADDR_BTH);
-//
-//    clientSocket = accept(serverSocket, (SOCKADDR*)&clientAddr, &clientAddrLen);
-//    if (clientSocket == INVALID_SOCKET) {
-//        fprintf(stderr, "accept() failed with error: %ld\n", WSAGetLastError());
-//    }
-//
-//    return clientSocket;
-//}
-//
-//void sendToPipe(const char* message, HANDLE hPipe) {
-//    DWORD bytesWritten;
-//    if (ConnectNamedPipe(hPipe, NULL) != FALSE) {
-//        WriteFile(hPipe, message, strlen(message), &bytesWritten, NULL);
-//        DisconnectNamedPipe(hPipe);
-//    }
-//}
-//
-//void bluetoothProcessingThread(SOCKET clientSocket, HANDLE hPipe) {
-//    char buffer[BUFFER_SIZE];
-//    int bytesRead;
-//
-//    while (1) {
-//        bytesRead = recv(clientSocket, buffer, sizeof(buffer) - 1, 0);
-//        if (bytesRead <= 0) {
-//            break;
-//        }
-//
-//        buffer[bytesRead] = '\0';  // Null-terminate the received data
-//        if (DEBUGG)
-//            printf("Received message from Bluetooth: %s\n", buffer);
-//
-//        // Send the received message to the pipe
-//        sendToPipe(buffer, hPipe);
-//    }
-//}
+#include "BlueToothReceiver.h"
+
+HANDLE TryOpenSerialPort(LPCWSTR portName, int maxRetries, int retryDelay) {
+    HANDLE hSerial = INVALID_HANDLE_VALUE;
+    for (int attempt = 0; attempt < maxRetries && hSerial == INVALID_HANDLE_VALUE; ++attempt) {
+        hSerial = CreateFile(portName, GENERIC_READ, 0, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hSerial == INVALID_HANDLE_VALUE) {
+            printf("Attempt %d: Could not open serial port. Retrying in %d seconds...\n", attempt + 1, retryDelay / 1000);
+            Sleep(retryDelay); 
+        }
+    }
+    return hSerial;
+}
+
+int mainBTConnection(std::queue<std::string>& messageQueue, std::condition_variable& cv, std::mutex& mtx) {
+    char* portName = (char*)malloc(25 * sizeof(char));
+    if (portName != NULL) {
+        strcpy_s(portName, 25, "\\\\.\\COM3");
+    }
+    LPCWSTR portNameLPCW = L"\\\\.\\COM3\0";
+    HANDLE hSerial = TryOpenSerialPort(portNameLPCW, 10, 2000);
+
+    if (hSerial == INVALID_HANDLE_VALUE) {
+        fprintf(stderr, "Error: Unable to establish connection to the serial port\n");
+        return 1;
+    }
+    printf("Successfully connected to the serial port.\n");
+
+ 
+    DCB dcbSerialParams = { 0 };
+    dcbSerialParams.DCBlength = sizeof(dcbSerialParams);
+    if (!GetCommState(hSerial, &dcbSerialParams)) {
+        fprintf(stderr, "Error getting serial port state\n");
+        CloseHandle(hSerial);
+        return 1;
+    }
+
+    dcbSerialParams.BaudRate = CBR_9600;
+    dcbSerialParams.ByteSize = 8;
+    dcbSerialParams.StopBits = ONESTOPBIT;
+    dcbSerialParams.Parity = NOPARITY;
+    if (!SetCommState(hSerial, &dcbSerialParams)) {
+        fprintf(stderr, "Error setting serial port state\n");
+        CloseHandle(hSerial);
+        return 1;
+    }
+
+    char buffer[1024];
+    DWORD bytesRead;
+    while (1) {
+        BOOL status = ReadFile(hSerial, buffer, sizeof(buffer) - 1, &bytesRead, NULL);
+        if (!status) {
+            fprintf(stderr, "Error reading from serial port\n");
+            break;
+        }
+
+        if (bytesRead > 0) {
+            buffer[bytesRead] = '\0'; 
+            printf("%s", buffer);
+            std::lock_guard<std::mutex> lock(mtx);
+            messageQueue.push(buffer);
+            cv.notify_one();
+        }
+    }
+    CloseHandle(hSerial);
+
+    return 0;
+}

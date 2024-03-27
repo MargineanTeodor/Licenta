@@ -2,4 +2,5 @@
 Mbed/cmake_build/*
 !cmake_build/NUCLEO_F401RE/develop/GCC_ARM/robot_car.bin
 Mbed/mbed-os/
+PCSoftware/.vs
 .vscode

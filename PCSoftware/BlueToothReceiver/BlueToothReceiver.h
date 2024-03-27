@@ -1,17 +1,15 @@
-#pragma once
-#pragma once
+#ifndef BLUETOOTHRECEIVER_H
+#define BLUETOOTHRECEIVER_H
 
-#include <WinSock2.h>
-#include <WS2bth.h>
-#include <BluetoothAPIs.h>
+#include <windows.h>
+#include <stdio.h>
+#include <queue>
+#include <string>
+#include <mutex>
+#include <condition_variable>
 
-#pragma comment(lib, "ws2_32.lib")
+HANDLE TryOpenSerialPort(LPCWSTR portName, int maxRetries, int retryDelay);
 
-#define BUFFER_SIZE 1024
-#define DEBUGG true
+int mainBTConnection(std::queue<std::string>& messageQueue, std::condition_variable& cv, std::mutex& mtx);
 
-SOCKET createBluetoothSocket();
-SOCKET bindBluetoothSocket(SOCKET serverSocket, SOCKADDR_BTH& serverAddr);
-SOCKET acceptBluetoothConnection(SOCKET serverSocket, SOCKADDR_BTH& clientAddr);
-void sendToPipe(const char* message, HANDLE hPipe);
-void bluetoothProcessingThread(SOCKET clientSocket, HANDLE hPipe);
+#endif // BLUETOOTHRECEIVER_H
