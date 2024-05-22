@@ -767,7 +767,7 @@ namespace periodics{
         {
             return;
         }
-        bool debugging = true;
+        bool debugging = false;
         if(debugging == true)
         {
             snprintf(buffer, sizeof(buffer), "@Gyroscope:%.3f;%.3f;%.3f;;\r\n",
@@ -791,10 +791,10 @@ namespace periodics{
             converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
             m_serial.write(buffer,strlen(buffer));
             snprintf(buffer, sizeof(buffer), "@2:%.3f;%.3f;%.3f;;\r\n",
-            m_velocityX, m_velocityY,m_velocityZ);
+            converted_linear_accelX, converted_linear_accelY,converted_linear_accelZ);
             m_serial.write(buffer,strlen(buffer));
             snprintf(buffer, sizeof(buffer), "@3:%.3f;%.3f;%.3f;;\r\n",
-            converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
+            converted_mag_x_uT, converted_mag_y_uT, converted_mag_z_uT);
             m_serial.write(buffer,strlen(buffer));
             snprintf(buffer, sizeof(buffer), "@4:%.3f;%.3f;%.3f;%.3f;;\r\n",
             quaternion_data_w_converted,quaternion_data_x_converted,quaternion_data_y_converted,quaternion_data_z_converted);
@@ -806,4 +806,4 @@ namespace periodics{
         ThisThread::sleep_for(chrono::milliseconds(1000));
     }
 
-}; // namespace periodics
+};

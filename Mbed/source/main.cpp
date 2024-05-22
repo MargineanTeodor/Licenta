@@ -7,12 +7,12 @@ const float g_baseTick = 0.0001; // seconds
 
 // Serial interface with the another device(like single board computer). It's an built-in class of mbed based on the UART communication, the inputs have to be transmitter and receiver pins. 
 UnbufferedSerial g_rpi(USBTX, USBRX, 19200);
-
+UnbufferedSerial g_bt(PA_2, PA_3, 9600);
 // It's a task for blinking periodically the built-in led on the Nucleo board, signaling the code is uploaded on the nucleo.
 periodics::CBlinker g_blinker(0.5 / g_baseTick, LED1);
 
 // It's a task for sending periodically the IMU values
-periodics::CImu g_imu(0.1 / g_baseTick, g_rpi, I2C_SDA, I2C_SCL);
+periodics::CImu g_imu(0.1 / g_baseTick, g_bt, I2C_SDA, I2C_SCL);
 
 // Map for redirecting messages with the key and the callback functions. If the message key equals to one of the enumerated keys, than it will be applied the paired callback function.
 drivers::CSerialMonitor::CSerialSubscriberMap g_serialMonitorSubscribers = {
@@ -66,13 +66,15 @@ uint32_t loop()
 }
 
 /**
- * @brief Main function applies the setup function and the loop function periodically. It runs automatically after the board started.
+ * @brief Main function applies the setup function and the loop function periodically. 
+ * It runs automatically after the board started.
  * 
  * @return int Error level codes error's type.  
  */
 int main() 
 {
-    uint32_t  l_errorLevel = setup(); 
+     // Create BufferedSerial object
+    uint32_t  l_errorLevel = setup();  // Ensure setup() is properly defined and implemented
     while(!l_errorLevel) 
     {
         l_errorLevel = loop();
