@@ -2837,6 +2837,29 @@ BNO055_RETURN_FUNCTION_TYPE bno055_read_quaternion_z(s16 *quaternion_z_s16);
  *  @retval 1 -> BNO055_ERROR
  *
  */
+BNO055_RETURN_FUNCTION_TYPE bno055_read_quaternion_wxyz_improved(struct bno055_quaternion_t *quaternion);
+
+/*!
+ *  @brief This API reads Quaternion data wxyz values
+ *  from register 0x20 to 0x27 it is a six byte data
+ *
+ *
+ *  @param quaternion : The value of quaternion wxyz data's
+ *
+ *  Parameter |    result
+ *  --------- | -----------------
+ *   w        | The quaternion w data
+ *   x        | The quaternion x data
+ *   y        | The quaternion y data
+ *   z        | The quaternion z data
+ *
+ *
+ *
+ *  @return results of bus communication function
+ *  @retval 0 -> BNO055_SUCCESS
+ *  @retval 1 -> BNO055_ERROR
+ *
+ */
 BNO055_RETURN_FUNCTION_TYPE bno055_read_quaternion_wxyz(struct bno055_quaternion_t *quaternion);
 
 /**************************************************/

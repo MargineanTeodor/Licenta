@@ -1,35 +1,26 @@
-
-
-/* Header file for the motion controller functionality */
 #include <main.hpp>
-/// Base sample time for the task manager. The measurement unit of base sample time is second.
+
 const float g_baseTick = 0.0001; // seconds
 
-// Serial interface with the another device(like single board computer). It's an built-in class of mbed based on the UART communication, the inputs have to be transmitter and receiver pins. 
 UnbufferedSerial g_rpi(USBTX, USBRX, 19200);
 UnbufferedSerial g_bt(PA_2, PA_3, 9600);
-// It's a task for blinking periodically the built-in led on the Nucleo board, signaling the code is uploaded on the nucleo.
+
 periodics::CBlinker g_blinker(0.5 / g_baseTick, LED1);
 
-// It's a task for sending periodically the IMU values
 periodics::CImu g_imu(0.1 / g_baseTick, g_bt, I2C_SDA, I2C_SCL);
 
-// Map for redirecting messages with the key and the callback functions. If the message key equals to one of the enumerated keys, than it will be applied the paired callback function.
 drivers::CSerialMonitor::CSerialSubscriberMap g_serialMonitorSubscribers = {
     {"7",mbed::callback(&g_imu,&periodics::CImu::ImuPublisherCommand)}
 };
 
-// Create the serial monitor object, which decodes, redirects the messages and transmits the responses.
 drivers::CSerialMonitor g_serialMonitor(g_rpi, g_serialMonitorSubscribers);
 
-// List of the task, each task will be applied their own periodicity, defined by the initializing the objects.
 utils::CTask* g_taskList[] = {
     &g_blinker,
     &g_imu,
     &g_serialMonitor
 }; 
 
-// Create the task manager, which applies periodically the tasks, miming a parallelism. It needs the list of task and the time base in seconds. 
 utils::CTaskManager g_taskManager(g_taskList, sizeof(g_taskList)/sizeof(utils::CTask*), g_baseTick);
 
 /**
@@ -39,11 +30,6 @@ utils::CTaskManager g_taskManager(g_taskList, sizeof(g_taskList)/sizeof(utils::C
  */
 uint32_t setup()
 {
-    // g_rpi.format(
-    //     /* bits */ 8,
-    //     /* parity */ SerialBase::None,
-    //     /* stop bit */ 1
-    // );
     g_rpi.write("\r\n\r\n", 4);
     g_rpi.write("#################\r\n", 19);
     g_rpi.write("#               #\r\n", 19);
@@ -73,11 +59,81 @@ uint32_t loop()
  */
 int main() 
 {
-     // Create BufferedSerial object
-    uint32_t  l_errorLevel = setup();  // Ensure setup() is properly defined and implemented
+    uint32_t  l_errorLevel = setup();  
     while(!l_errorLevel) 
     {
         l_errorLevel = loop();
     }
     return l_errorLevel;
 }
+
+
+// #include "mbed.h"
+
+// char buffer[256];
+
+// // Define UART pins and settings
+// UnbufferedSerial uart(PA_9, PA_10, 115200); // TX, RX, Baud rate 115200
+// UnbufferedSerial g_rpi(USBTX, USBRX, 19200);
+// // Function to send a command to the DWM1001 over UART
+// void send_command(const char *command) {
+//     uart.write(command, strlen(command)); // Send the command
+// }
+
+// // Function to read response from the DWM1001 over UART
+// void read_response(char *response, size_t max_length) {
+//     size_t response_length = 0;
+//     while (response_length < max_length - 1) {
+//         if (uart.readable()) {
+//             char c;
+//             uart.read(&c, 1);
+//             response[response_length++] = c;
+//         }
+//         else 
+//             break;
+//     }
+//     response[response_length] = '\0'; // Null-terminate the response
+// }
+
+// // Function to wake up the DWM1001
+// void wake_up_dwm1001() {
+//     const char wakeup_command[] = "\n\r";
+//     send_command(wakeup_command); // Send the wakeup command
+// }
+
+// int main() {
+//     // Allow some time for the system to initialize
+//     ThisThread::sleep_for(1000ms);
+
+//     // Wake up the DWM1001
+//     wake_up_dwm1001();
+    
+//     // Allow some time for the DWM1001 to wake up
+//     ThisThread::sleep_for(500ms);
+
+//     // Buffer to store the response
+//     char response[256];
+
+//     // Example command to send to the DWM1001
+//     // const char command[] = "lep\r"; // Replace with the actual command sequence
+//     // send_command(command);
+
+//     // Allow some time for the DWM1001 to process the command
+//     ThisThread::sleep_for(500ms);
+
+//     // Main loop to continuously read and print data from the DWM1001
+//     while (true) {
+//         // Read the response from the DWM1001
+//         read_response(response, sizeof(response));
+//         // Print the received response
+//         if (strlen(response) > 0) {
+//             snprintf(buffer, sizeof(buffer), "@Raspuns: %s",response);
+//             g_rpi.write(buffer,strlen(buffer));
+//         }
+//         snprintf(buffer, sizeof(buffer), "Aici %d\n",strlen(response));
+//         g_rpi.write(buffer,strlen(buffer));
+//         // Small delay to prevent overwhelming the output
+//         ThisThread::sleep_for(100ms);
+//     }
+// }
+

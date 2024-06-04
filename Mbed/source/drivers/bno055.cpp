@@ -2538,6 +2538,98 @@ BNO055_RETURN_FUNCTION_TYPE bno055_read_quaternion_wxyz(struct bno055_quaternion
     return com_rslt;
 }
 
+#include <cmath> // Include cmath for the round function
+
+struct kalman_state {
+    float est;   // Estimated state
+    float p_est; // Estimation error
+    float q;     // Process noise
+    float r;     // Measurement noise
+};
+
+void kalman_init(struct kalman_state *ks, float q, float r) {
+    ks->est = 0.0f;
+    ks->p_est = 1.0f;
+    ks->q = q;
+    ks->r = r;
+}
+
+void kalman_update(struct kalman_state *ks, float measurement) {
+    // Prediction step
+    ks->p_est += ks->q;
+
+    // Correction step
+    float k = ks->p_est / (ks->p_est + ks->r); // Kalman gain
+    ks->est += k * (measurement - ks->est);    // Update estimate
+    ks->p_est *= (1 - k);                      // Update error covariance
+}
+
+BNO055_RETURN_FUNCTION_TYPE bno055_read_quaternion_wxyz_improved(struct bno055_quaternion_t *quaternion)
+{
+    static struct kalman_state ks_w = {0, 1, 0.1f, 0.1f};
+    static struct kalman_state ks_x = {0, 1, 0.1f, 0.1f};
+    static struct kalman_state ks_y = {0, 1, 0.1f, 0.1f};
+    static struct kalman_state ks_z = {0, 1, 0.1f, 0.1f};
+
+    BNO055_RETURN_FUNCTION_TYPE com_rslt = BNO055_ERROR;
+
+    u8 data_u8[BNO055_QUATERNION_WXYZ_DATA_SIZE] = {
+        BNO055_INIT_VALUE, BNO055_INIT_VALUE, BNO055_INIT_VALUE, BNO055_INIT_VALUE, BNO055_INIT_VALUE,
+        BNO055_INIT_VALUE, BNO055_INIT_VALUE, BNO055_INIT_VALUE
+    };
+    s8 stat_s8 = BNO055_ERROR;
+
+    if (p_bno055 == NULL)
+    {
+        return BNO055_E_NULL_PTR;
+    }
+    else
+    {
+        if (p_bno055->page_id != BNO055_PAGE_ZERO)
+        {
+            stat_s8 = bno055_write_page_id(BNO055_PAGE_ZERO);
+        }
+        if ((stat_s8 == BNO055_SUCCESS) || (p_bno055->page_id == BNO055_PAGE_ZERO))
+        {
+            com_rslt = p_bno055->BNO055_BUS_READ_FUNC(p_bno055->dev_addr,
+                                                      BNO055_QUATERNION_DATA_W_LSB_VALUEW_REG,
+                                                      data_u8,
+                                                      BNO055_QUATERNION_WXYZ_DATA_SIZE);
+
+            s16 raw_w =
+                (s16)((((s32)((s8)data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_W_MSB])) << BNO055_SHIFT_EIGHT_BITS) |
+                      (data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_W_LSB]));
+            s16 raw_x =
+                (s16)((((s32)((s8)data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_X_MSB])) << BNO055_SHIFT_EIGHT_BITS) |
+                      (data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_X_LSB]));
+            s16 raw_y =
+                (s16)((((s32)((s8)data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_Y_MSB])) << BNO055_SHIFT_EIGHT_BITS) |
+                      (data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_Y_LSB]));
+            s16 raw_z =
+                (s16)((((s32)((s8)data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_Z_MSB])) << BNO055_SHIFT_EIGHT_BITS) |
+                      (data_u8[BNO055_SENSOR_DATA_QUATERNION_WXYZ_Z_LSB]));
+
+            // Apply Kalman filter
+            kalman_update(&ks_w, raw_w);
+            kalman_update(&ks_x, raw_x);
+            kalman_update(&ks_y, raw_y);
+            kalman_update(&ks_z, raw_z);
+
+            quaternion->w = (s16)round(ks_w.est);
+            quaternion->x = (s16)round(ks_x.est);
+            quaternion->y = (s16)round(ks_y.est);
+            quaternion->z = (s16)round(ks_z.est);
+        }
+        else
+        {
+            com_rslt = BNO055_ERROR;
+        }
+    }
+
+    return com_rslt;
+}
+
+
 /*!
  *  @brief This API reads Linear accel data x values
  *  from register 0x29 and 0x2A it is a two byte data
