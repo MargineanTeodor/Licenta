@@ -55,9 +55,6 @@ def main():
                             5: 13   # Quaternion 2
                         }.get(message_type, 0)
 
-                        if message_type in (4, 5):
-                            values = [v / 10000 for v in values]
-
                         if not error_occurred:
                             current_readings[start_index:start_index + len(values)] = values
 
