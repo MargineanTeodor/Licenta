@@ -40,7 +40,7 @@
 #include <drivers/bno055.hpp>
 /* Header file for the task manager library, which  applies periodically the fun function of it's children*/
 #include <utils/task.hpp>
-
+#include <cmath>
 namespace periodics
 {
    /**
@@ -103,6 +103,9 @@ namespace periodics
             float m_velocityY;
             float m_velocityZ;
             int m_velocityStationaryCounter;
+            float prev_accelX;
+            float prev_accelY;
+            float prev_accelZ;
     }; // class CImu
 
 }; // namespace utils

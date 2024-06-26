@@ -19,6 +19,9 @@ namespace periodics {
         , m_velocityX(0.0)
         , m_velocityY(0.0)
         , m_velocityZ(0.0)
+        , prev_accelX(0.0)
+        , prev_accelY(0.0)
+        , prev_accelZ(0.0) 
         , m_velocityStationaryCounter(0)
     {
         s32 comres = BNO055_ERROR;
@@ -209,126 +212,103 @@ namespace periodics {
         ThisThread::sleep_for(chrono::milliseconds(msek));
     }
 
-    // Periodically retrieves and processes IMU sensor values
-    void CImu::_run()
+void CImu::_run()
+{
+    if (!m_isActive) return;
+    const float alpha = 0.1;  
+    char buffer[256];
+    s32 comres = BNO055_SUCCESS;
+
+    float converted_euler_h_deg = BNO055_INIT_VALUE;
+    float converted_euler_p_deg = BNO055_INIT_VALUE;
+    float converted_euler_r_deg = BNO055_INIT_VALUE;
+
+    comres += bno055_convert_float_euler_h_deg(&converted_euler_h_deg);
+    comres += bno055_convert_float_euler_p_deg(&converted_euler_p_deg);
+    comres += bno055_convert_float_euler_r_deg(&converted_euler_r_deg);
+
+    struct bno055_linear_accel_t linear_accel = {0};
+    comres += bno055_read_linear_accel_xyz(&linear_accel);
+    float filtered_accelX = alpha * (linear_accel.x * 0.001 * 9.81) + (1 - alpha) * prev_accelX;
+    float filtered_accelY = alpha * (linear_accel.y * 0.001 * 9.81) + (1 - alpha) * prev_accelY;
+    float filtered_accelZ = alpha * (linear_accel.z * 0.001 * 9.81) + (1 - alpha) * prev_accelZ;
+
+    // Update previous values
+    prev_accelX = filtered_accelX;
+    prev_accelY = filtered_accelY;
+    prev_accelZ = filtered_accelZ;
+
+    struct bno055_mag_float_t mag_xyz = {0};
+
+    comres += bno055_convert_float_mag_xyz_uT(&mag_xyz);
+    float converted_mag_x_uT = mag_xyz.x;
+    float converted_mag_y_uT = mag_xyz.y;
+    float converted_mag_z_uT = mag_xyz.z;
+
+    // Scaling factor for quaternions
+    const float QUATERNION_SCALE = 1.0f / 16384.0f; // 2^14 = 16384
+
+    struct bno055_quaternion_t quaternion_raw;
+    comres += bno055_read_quaternion_wxyz(&quaternion_raw);
+
+    float quaternion_data_w_raw_converted = quaternion_raw.w * QUATERNION_SCALE;
+    float quaternion_data_x_raw_converted = quaternion_raw.x * QUATERNION_SCALE;
+    float quaternion_data_y_raw_converted = quaternion_raw.y * QUATERNION_SCALE;
+    float quaternion_data_z_raw_converted = quaternion_raw.z * QUATERNION_SCALE;
+
+    // Read quaternions using improved function
+    struct bno055_quaternion_t quaternion_improved;
+    comres += bno055_read_quaternion_wxyz_improved(&quaternion_improved);
+
+    float quaternion_data_w_improved_converted = quaternion_improved.w * QUATERNION_SCALE;
+    float quaternion_data_x_improved_converted = quaternion_improved.x * QUATERNION_SCALE;
+    float quaternion_data_y_improved_converted = quaternion_improved.y * QUATERNION_SCALE;
+    float quaternion_data_z_improved_converted = quaternion_improved.z * QUATERNION_SCALE;
+
+    if (comres != BNO055_SUCCESS)
     {
-        if (!m_isActive) return;
-        char buffer[256];
-        s32 comres = BNO055_SUCCESS;
-
-        float converted_euler_h_deg = BNO055_INIT_VALUE;
-        float converted_euler_p_deg = BNO055_INIT_VALUE;
-        float converted_euler_r_deg = BNO055_INIT_VALUE;
-
-        // Read Euler angles
-        comres += bno055_convert_float_euler_h_deg(&converted_euler_h_deg);
-        comres += bno055_convert_float_euler_p_deg(&converted_euler_p_deg);
-        comres += bno055_convert_float_euler_r_deg(&converted_euler_r_deg);
-
-        float converted_linear_accelX = BNO055_INIT_VALUE;
-        float converted_linear_accelY = BNO055_INIT_VALUE;
-        float converted_linear_accelZ = BNO055_INIT_VALUE;
-
-        // Read linear acceleration
-        comres += bno055_convert_float_linear_accel_x_msq(&converted_linear_accelX);
-        comres += bno055_convert_float_linear_accel_y_msq(&converted_linear_accelY);
-        comres += bno055_convert_float_linear_accel_z_msq(&converted_linear_accelZ);
-
-        float converted_mag_x_uT = BNO055_INIT_VALUE;
-        float converted_mag_y_uT = BNO055_INIT_VALUE;
-        float converted_mag_z_uT = BNO055_INIT_VALUE;
-
-        // Read magnetometer data
-        comres += bno055_convert_float_mag_x_uT(&converted_mag_x_uT);
-        comres += bno055_convert_float_mag_y_uT(&converted_mag_y_uT);
-        comres += bno055_convert_float_mag_z_uT(&converted_mag_z_uT);
-
-        // Scaling factor for quaternions
-        const float QUATERNION_SCALE = 1.0f / 16384.0f;
-
-        // Read raw quaternion data
-        struct bno055_quaternion_t quaternion_raw;
-        comres += bno055_read_quaternion_wxyz(&quaternion_raw);
-
-        float quaternion_data_w_raw_converted = quaternion_raw.w * QUATERNION_SCALE;
-        float quaternion_data_x_raw_converted = quaternion_raw.x * QUATERNION_SCALE;
-        float quaternion_data_y_raw_converted = quaternion_raw.y * QUATERNION_SCALE;
-        float quaternion_data_z_raw_converted = quaternion_raw.z * QUATERNION_SCALE;
-
-        // Read quaternions using improved function
-        struct bno055_quaternion_t quaternion_improved;
-        comres += bno055_read_quaternion_wxyz_improved(&quaternion_improved);
-
-        float quaternion_data_w_improved_converted = quaternion_improved.w * QUATERNION_SCALE;
-        float quaternion_data_x_improved_converted = quaternion_improved.x * QUATERNION_SCALE;
-        float quaternion_data_y_improved_converted = quaternion_improved.y * QUATERNION_SCALE;
-        float quaternion_data_z_improved_converted = quaternion_improved.z * QUATERNION_SCALE;
-
-        // Update velocities based on linear acceleration
-        if (fabs(converted_linear_accelX) <= 0.09 && fabs(converted_linear_accelY) <= 0.09)
-        {
-            m_velocityX = 0.0;
-            m_velocityY = 0.0;
-            m_velocityZ += converted_linear_accelZ * 0.1;
-            m_velocityStationaryCounter += 1;
-            if (m_velocityStationaryCounter >= 15)
-            {
-                m_velocityZ = 0.0;
-                m_velocityStationaryCounter = 0;
-            }
-        }
-        else
-        {
-            m_velocityX += converted_linear_accelX * 0.1; // Δt = f_period * g_baseTick
-            m_velocityY += converted_linear_accelY * 0.1;
-            m_velocityZ += converted_linear_accelZ * 0.1;
-            m_velocityStationaryCounter = 0;
-        }
-
-        if (comres != BNO055_SUCCESS)
-        {
-            return;
-        }
-
-        bool debugging = false;
-        if (debugging)
-        {
-            snprintf(buffer, sizeof(buffer), "@Gyroscope:%.3f;%.3f;%.3f;;\r\n",
-                    converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@Accelerometru:%.3f;%.3f;%.3f;;\r\n",
-                    m_velocityX, m_velocityY, m_velocityZ);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@Magnetometru:%.3f;%.3f;%.3f;;\r\n",
-                    converted_mag_x_uT, converted_mag_y_uT, converted_mag_z_uT);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@QuaternioniVechi:%.3f;%.3f;%.3f;%.3f;;\r\n",
-                    quaternion_data_w_raw_converted, quaternion_data_x_raw_converted, quaternion_data_y_raw_converted, quaternion_data_z_raw_converted);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@QuaternioniImproved:%.3f;%.3f;%.3f;%.3f;;\r\n",
-                    quaternion_data_w_improved_converted, quaternion_data_x_improved_converted, quaternion_data_y_improved_converted, quaternion_data_z_improved_converted);
-            m_serial.write(buffer, strlen(buffer));
-        }
-        else
-        {
-            snprintf(buffer, sizeof(buffer), "@1:%.3f;%.3f;%.3f;;\r\n",
-                    converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@2:%.3f;%.3f;%.3f;;\r\n",
-                    converted_linear_accelX, converted_linear_accelY, converted_linear_accelZ);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@3:%.3f;%.3f;%.3f;;\r\n",
-                    converted_mag_x_uT, converted_mag_y_uT, converted_mag_z_uT);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@4:%.3f;%.3f;%.3f;%.3f;;\r\n",
-                    quaternion_data_w_raw_converted, quaternion_data_x_raw_converted, quaternion_data_y_raw_converted, quaternion_data_z_raw_converted);
-            m_serial.write(buffer, strlen(buffer));
-            snprintf(buffer, sizeof(buffer), "@5:%.3f;%.3f;%.3f;%.3f;;\r\n",
-                    quaternion_data_w_improved_converted, quaternion_data_x_improved_converted, quaternion_data_y_improved_converted, quaternion_data_z_improved_converted);
-            m_serial.write(buffer, strlen(buffer));
-        }
-
-        ThisThread::sleep_for(chrono::milliseconds(1000));
+        return;
     }
+
+    bool debugging = false;
+    if (debugging)
+    {
+        snprintf(buffer, sizeof(buffer), "@Gyroscope:%.3f;%.3f;%.3f;;\r\n",
+                 converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@Accelerometru:%.3f;%.3f;%.3f;;\r\n",
+                 filtered_accelX, filtered_accelY, filtered_accelZ);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@Magnetometru:%.3f;%.3f;%.3f;;\r\n",
+                 converted_mag_x_uT, converted_mag_y_uT, converted_mag_z_uT);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@QuaternioniVechi:%.3f;%.3f;%.3f;%.3f;;\r\n",
+                 quaternion_data_w_raw_converted, quaternion_data_x_raw_converted, quaternion_data_y_raw_converted, quaternion_data_z_raw_converted);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@QuaternioniImproved:%.3f;%.3f;%.3f;%.3f;;\r\n",
+                 quaternion_data_w_improved_converted, quaternion_data_x_improved_converted, quaternion_data_y_improved_converted, quaternion_data_z_improved_converted);
+        m_serial.write(buffer, strlen(buffer));
+    }
+    else
+    {
+        snprintf(buffer, sizeof(buffer), "@1:%.3f;%.3f;%.3f;;\r\n",
+                 converted_euler_r_deg, converted_euler_p_deg, converted_euler_h_deg);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@2:%.3f;%.3f;%.3f;;\r\n",
+                 filtered_accelX, filtered_accelY, filtered_accelZ);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@3:%.3f;%.3f;%.3f;;\r\n",
+                 converted_mag_x_uT, converted_mag_y_uT, converted_mag_z_uT);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@4:%.3f;%.3f;%.3f;%.3f;;\r\n",
+                 quaternion_data_w_raw_converted, quaternion_data_x_raw_converted, quaternion_data_y_raw_converted, quaternion_data_z_raw_converted);
+        m_serial.write(buffer, strlen(buffer));
+        snprintf(buffer, sizeof(buffer), "@5:%.3f;%.3f;%.3f;%.3f;;\r\n",
+                 quaternion_data_w_improved_converted, quaternion_data_x_improved_converted, quaternion_data_y_improved_converted, quaternion_data_z_improved_converted);
+        m_serial.write(buffer, strlen(buffer));
+    }
+
+    ThisThread::sleep_for(chrono::milliseconds(100));
+}
 
 };
